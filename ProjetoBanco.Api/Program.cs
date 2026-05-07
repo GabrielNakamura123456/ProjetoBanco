@@ -1,13 +1,23 @@
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using ProjetoBanco.Api.Consumers;
 using ProjetoBanco.Api.Data;
 using ProjetoBanco.Api.Enums;
 using ProjetoBanco.Api.Messaging;
 using ProjetoBanco.Api.Models;
 using ProjetoBanco.Api.Services;
+using Serilog;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .WriteTo.File("logs/projeto-banco-.txt", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -20,12 +30,32 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddHealthChecks();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseInMemoryDatabase("ProjetoBancoDb"));
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseInMemoryDatabase("TestDb"));
+}
+else
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseOracle(builder.Configuration.GetConnectionString("Oracle")));
+}
 
 builder.Services.AddScoped<ContratacaoService>();
 builder.Services.AddSingleton<RabbitMqPublisher>();
 builder.Services.AddHostedService<ContratacaoConsumer>();
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("ProjetoBanco.Api"))
+            .AddAspNetCoreInstrumentation()
+            .AddOtlpExporter(options =>
+            {
+                options.Endpoint = new Uri("http://localhost:4317");
+            });
+    });
 
 var app = builder.Build();
 
@@ -53,6 +83,8 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
     }
 }
+
+app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment())
 {
