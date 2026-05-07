@@ -43,13 +43,7 @@ A escolha de apenas uma fila foi realizada devido à simplicidade do domínio e ce
 
 # 4. Diagrama de Classes
 
-Adicionar o diagrama na pasta `docs`.
-
-Exemplo:
-
-```md
 ![Diagrama](docs/diagrama-classes.png)
-```
 
 ---
 
